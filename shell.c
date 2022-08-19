@@ -5,28 +5,51 @@
 #include <stdbool.h>
 
 const int INIT_STR_SIZE = 100;
-const int CMD_SIZE = 20;
-const int INIT_CMD_SIZE = 10;
+const int INIT_CMD_SIZE = 20;
+const int INIT_TOKEN_SIZE = 10;
 
 char* get_input();
 char** get_tokens(char* input_str);
+void run_command(char** tokens);
+
 
 int main() {
     while(1){
         char* input = get_input();
         if (input == NULL){
-            printf("\n");
             continue;
         }
-        printf("%s\n", input);
-        // char** cmd_tokens = get_tokens(input);
+        char** cmd_tokens = get_tokens(input);
+        if (cmd_tokens == NULL){
+            continue;
+        } else {
+            if (strcmp(cmd_tokens[0], "ps_history") == 0){
+                printf("Print process history\n");
+            } else if (strcmp(cmd_tokens[0], "cmd_history") == 0){
+                printf("Print command history\n");
+            } else {
+                run_command(cmd_tokens);
+            }     
+        }
+    }
+}
+
+void run_command(char** cmd_tokens){
+    pid_t pid = fork();
+    if (pid < 0){
+        exit(1);
+    } else if (pid == 0){
+        execvp(cmd_tokens[0], cmd_tokens);
+        exit(1);
+    } else {
+        wait(NULL);
     }
 }
 
 char* get_input(){
-    char* s = malloc(INIT_STR_SIZE * sizeof(char));
     char ch;
     int i = 0, s_size = INIT_STR_SIZE;
+    char* s = malloc(s_size * sizeof(char));
     while((ch = getc(stdin)) != '\n'){
         if (i == s_size - 1){
             s_size += INIT_STR_SIZE;
@@ -40,23 +63,31 @@ char* get_input(){
 
 char** get_tokens(char* input_str){
     int l = strlen(input_str);
-    char** tokens = malloc(INIT_CMD_SIZE * sizeof(char*));
-    int t_idx = 0, cmd_idx = 0, t_size = INIT_CMD_SIZE;
+    int t_idx = 0, cmd_idx = 0, t_size = INIT_TOKEN_SIZE, cmd_size = INIT_CMD_SIZE;
+    char** tokens = malloc(t_size * sizeof(char*));
     bool esc = 0;
 
     for (int i = 0; i < l; i++){
         if (t_idx == t_size - 1){
-            t_size += INIT_CMD_SIZE;
+            t_size += INIT_TOKEN_SIZE;
             tokens = realloc(tokens, t_size * sizeof(char*));
         }
         if (tokens[t_idx] == NULL){
-            tokens[t_idx] = malloc(CMD_SIZE * sizeof(char));
+            cmd_size = INIT_CMD_SIZE;
+            tokens[t_idx] = malloc(cmd_idx * sizeof(char));
             cmd_idx = 0;
         }
-        if (!esc && input_str[i] == ' '){
-            tokens[t_idx++][cmd_idx+1] = '\0';
+        if (cmd_idx == cmd_size - 1){
+            cmd_size += INIT_CMD_SIZE;
+            tokens[t_idx] = realloc(tokens[t_idx], cmd_size * sizeof(char));
+            printf("%s\n", tokens[t_idx]);
         }
-        else{
+        if (!esc && input_str[i] == ' '){
+            if (cmd_idx == 0){
+                continue;
+            }
+            tokens[t_idx++][cmd_idx+1] = '\0';
+        } else{
             if (input_str[i] == '"'){
                 esc = !esc;
             } else{
@@ -70,9 +101,10 @@ char** get_tokens(char* input_str){
             }
         }
     }
-    printf("\n");
-    for (int i = 0; i < t_idx; i++){
-        printf("%s\n", tokens[i]);
-    }
+    // for (int i = 0; i < t_idx; i++){
+    //     printf("%s\n", tokens[i]);
+    // }
+    // To mark the end of the array
+    tokens[t_idx] = NULL;
     return tokens;
 }
