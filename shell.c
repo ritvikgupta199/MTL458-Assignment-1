@@ -6,20 +6,20 @@
 #include <limits.h>
 
 const int INIT_STR_SIZE = 100;
-const int INIT_CMD_SIZE = 20;
-const int INIT_TOKEN_SIZE = 10;
+// const int INIT_CMD_SIZE = 20;
+const int INIT_TOKEN_LEN = 10;
 
 char* get_input();
 char** get_tokens(char* input_str);
 void run_command(char** tokens);
+void update_curr_dir();
+void change_dir(char** tokens);
 
+char cwd[PATH_MAX];
 
 
 int main() {
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) == NULL){
-        exit(1);
-    }
+    update_curr_dir();
     while(1){
         printf("%s$ ", cwd);
         char* input = get_input();
@@ -34,87 +34,101 @@ int main() {
                 printf("Print process history\n");
             } else if (strcmp(cmd_tokens[0], "cmd_history") == 0){
                 printf("Print command history\n");
+            } else if (strcmp(cmd_tokens[0], "cd") == 0){
+                change_dir(cmd_tokens);
             } else if (strcmp(cmd_tokens[0], "exit") == 0){
                 exit(1);
             } else {
                 run_command(cmd_tokens);
             }     
         }
+        free(cmd_tokens);
+        free(input);
     }
 }
 
+// Update the current working directory
+void update_curr_dir(){
+    if (getcwd(cwd, sizeof(cwd)) == NULL){
+        exit(1); // error in fetching working directory
+    }
+    return;
+}
+
+// Change working directory
+void change_dir(char** cmd_tokens){
+    if (cmd_tokens[1] == NULL){
+        // if no directory is specified, change to home directory
+        cmd_tokens[1] = getenv("HOME");
+    }
+    if (chdir(cmd_tokens[1]) != 0){
+        perror("change directory failed");
+    }
+    update_curr_dir(); // update the current working directory
+    return;
+}
+
+// Run commands using exec()
 void run_command(char** cmd_tokens){
     pid_t pid = fork();
     if (pid < 0){
+        perror("fork error");
         exit(1);
     } else if (pid == 0){
         execvp(cmd_tokens[0], cmd_tokens);
+        // if exec returns then there was an error
+        perror("exec error");
         exit(1);
     } else {
-        wait(NULL);
+        wait(NULL); // wait for child to finish
     }
 }
 
-
+// Take arbitrary length input for the shell
 char* get_input(){
     char ch;
     int i = 0, s_size = INIT_STR_SIZE;
-    char* s = malloc(s_size * sizeof(char));
+    char* s = malloc(s_size * sizeof(char)); // allocate memory for string
+    if (s == NULL){
+        perror("malloc error");
+        exit(1);
+    }
     while((ch = getc(stdin)) != '\n'){
+        // if the index reaches the second last element of the string, reallocate more space
+        // second last element is last non-null character
         if (i == s_size - 1){
             s_size += INIT_STR_SIZE;
             s = realloc(s, s_size * sizeof(char));
+            if (s == NULL){
+                perror("realloc error");
+                exit(1);
+            }
         }
         s[i++] = ch;
     }
-    s[i] = '\0';
+    s[i] = '\0'; // null terminate the string
     return s;
 }
 
+// Take input string and return array of tokens split by ' '
 char** get_tokens(char* input_str){
-    int l = strlen(input_str);
-    int t_idx = 0, cmd_idx = 0, t_size = INIT_TOKEN_SIZE, cmd_size = INIT_CMD_SIZE;
-    char** tokens = malloc(t_size * sizeof(char*));
-    bool esc = 0;
-
-    for (int i = 0; i < l; i++){
-        if (t_idx == t_size - 1){
-            t_size += INIT_TOKEN_SIZE;
+    char** tokens = malloc(INIT_TOKEN_LEN * sizeof(char*)); // array of pointers to tokens
+    int i = 0, t_size = INIT_TOKEN_LEN;
+    char* p = strtok(input_str, " ");
+    while(p != NULL) {
+        // if the index reaches the second last element of the array, reallocate more space
+        // second last element is the last non-NULL element of the array
+        if (i == t_size - 1) {
+            t_size += INIT_TOKEN_LEN;
             tokens = realloc(tokens, t_size * sizeof(char*));
-        }
-        if (tokens[t_idx] == NULL){
-            cmd_size = INIT_CMD_SIZE;
-            tokens[t_idx] = malloc(cmd_idx * sizeof(char));
-            cmd_idx = 0;
-        }
-        if (cmd_idx == cmd_size - 1){
-            cmd_size += INIT_CMD_SIZE;
-            tokens[t_idx] = realloc(tokens[t_idx], cmd_size * sizeof(char));
-            printf("%s\n", tokens[t_idx]);
-        }
-        if (!esc && input_str[i] == ' '){
-            if (cmd_idx == 0){
-                continue;
-            }
-            tokens[t_idx++][cmd_idx+1] = '\0';
-        } else{
-            if (input_str[i] == '"'){
-                esc = !esc;
-            } else{
-                tokens[t_idx][cmd_idx++] = input_str[i];
-            }
-            if (i == l-1){
-                if (esc && input_str[i] != '"'){
-                    return NULL;
-                }
-                tokens[t_idx++][cmd_idx+1] = '\0';
+            if (tokens == NULL){
+                perror("realloc error");
+                exit(1);
             }
         }
+        tokens[i++] = p;
+        p = strtok(NULL, " ");
     }
-    // for (int i = 0; i < t_idx; i++){
-    //     printf("%s\n", tokens[i]);
-    // }
-    // To mark the end of the array
-    tokens[t_idx] = NULL;
+    tokens[i] = NULL; // last element of the array is NULL
     return tokens;
 }
