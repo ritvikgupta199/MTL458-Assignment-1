@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <limits.h>
 
 const int INIT_STR_SIZE = 100;
 const int INIT_CMD_SIZE = 20;
@@ -13,8 +14,14 @@ char** get_tokens(char* input_str);
 void run_command(char** tokens);
 
 
+
 int main() {
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) == NULL){
+        exit(1);
+    }
     while(1){
+        printf("%s$ ", cwd);
         char* input = get_input();
         if (input == NULL){
             continue;
@@ -27,6 +34,8 @@ int main() {
                 printf("Print process history\n");
             } else if (strcmp(cmd_tokens[0], "cmd_history") == 0){
                 printf("Print command history\n");
+            } else if (strcmp(cmd_tokens[0], "exit") == 0){
+                exit(1);
             } else {
                 run_command(cmd_tokens);
             }     
@@ -45,6 +54,7 @@ void run_command(char** cmd_tokens){
         wait(NULL);
     }
 }
+
 
 char* get_input(){
     char ch;
