@@ -165,7 +165,8 @@ void run_command(char** cmd_tokens){
         exit(1);
     } else { // parent process
         if (!is_background){ // if command is not background
-            wait(NULL); // wait for child to finish
+            int status;
+            waitpid(pid, &status, 0); // wait for the particular child to finish
         } else {
             printf("[%d] %s\n", pid, cmd_tokens[0]); // print the pid and command of the background process
         }
