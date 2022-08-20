@@ -21,6 +21,7 @@ struct History {
 };
 struct History* cmd_history;
 
+// Structure to store process history
 struct ProcessHistory {
     pid_t* pids;
     int size, capacity;
@@ -47,31 +48,31 @@ char cwd[PATH_MAX];
 
 
 int main() {
-    init();
+    init(); // initialize working directory, command history and process history
     while(1){
-        printf("%s$ ", cwd);
+        printf("%s$ ", cwd); // print working directory and prompt
         char* input = get_input();
         if (input == NULL) {
-            continue;
+            continue; // if input is NULL, continue to next iteration
         }
         char* cmd = strdup(input);
-        char** cmd_tokens = get_tokens(input);
+        char** cmd_tokens = get_tokens(input); // get command tokens from input
         if (cmd_tokens == NULL){
             continue;
         } else {
             if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0){
-                display_pids();
+                display_pids(); // display process history
             } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0){
-                display_queue(cmd_history);
+                display_queue(cmd_history); // display command history
             } else if (strcmp(cmd_tokens[0], CD_CMD) == 0){
-                change_dir(cmd_tokens);
+                change_dir(cmd_tokens); // change working directory
             } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0){
-                exit(0);
+                exit(0); // exit the shell
             } else {
-                run_command(cmd_tokens);
+                run_command(cmd_tokens); // run a command using exec()
             }     
         }
-        enqueue(cmd_history, cmd);
+        enqueue(cmd_history, cmd); // add the command to the command history
         free(cmd_tokens);
         free(input);
     }
@@ -188,8 +189,8 @@ void update_curr_dir(){
 
 // Change working directory
 void change_dir(char** cmd_tokens){
-    if (cmd_tokens[1] == NULL){
-        // if no directory is specified, change to home directory
+    if (cmd_tokens[1] == NULL || strcmp(cmd_tokens[1], "~") == 0){
+        // if no directory is specified or directory is ~, change to home directory
         cmd_tokens[1] = getenv("HOME");
     }
     if (chdir(cmd_tokens[1]) != 0){
@@ -206,7 +207,7 @@ void run_command(char** cmd_tokens){
         is_background = true;
         cmd_tokens[0] = cmd_tokens[0] + 1; // set the str pointer to the next element
     }
-    pid_t pid = fork();
+    pid_t pid = fork(); // create a child process
     if (pid < 0){
         perror("fork error");
         exit(1);
@@ -216,7 +217,7 @@ void run_command(char** cmd_tokens){
         perror("exec error");
         exit(1);
     } else { // parent process
-        add_pid(pid);
+        add_pid(pid); // add the pid to the process history
         if (!is_background){ // if command is not background
             int status;
             waitpid(pid, &status, 0); // wait for the particular child to finish
