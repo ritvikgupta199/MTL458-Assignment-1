@@ -8,6 +8,7 @@
   - [x] PID list
   - [ ] Process status
 - [ ] Piping between commands
-- [ ] Command runs in background
-  - [ ] Handle for `cd`, `cmd_history`, and `ps_history`
+  - [x] Pipe detection
+- [x] Command runs in background
+  - [x] Handle for `cmd_history`, and `ps_history`
 - [ ] Support for environment variables

@@ -13,6 +13,7 @@ const char* HIST_CMD = "cmd_history";
 const char* PROC_HIST_CMD = "ps_history";
 const char* CD_CMD = "cd";
 const char* EXIT_CMD = "exit";
+const char* PIPE_CHAR = "|";
 
 // Structure to store command history as a queue
 struct History {
@@ -28,11 +29,13 @@ struct ProcessHistory {
 };
 struct ProcessHistory ps_history;
 
-void update_curr_dir();
 void init();
+void update_curr_dir();
 char* get_input();
 char** get_tokens(char* input_str);
+int get_pipe(char** tokens);
 void run_command(char** tokens);
+void run_cmd_fork(char** tokens);
 void change_dir(char** tokens);
 
 struct History* create_queue();
@@ -60,17 +63,13 @@ int main() {
         if (cmd_tokens == NULL){
             continue;
         } else {
-            if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0){
-                display_pids(); // display process history
-            } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0){
-                display_queue(cmd_history); // display command history
-            } else if (strcmp(cmd_tokens[0], CD_CMD) == 0){
+            if (strcmp(cmd_tokens[0], CD_CMD) == 0) {
                 change_dir(cmd_tokens); // change working directory
-            } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0){
+            } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0) {
                 exit(0); // exit the shell
             } else {
-                run_command(cmd_tokens); // run a command using exec()
-            }     
+                run_command(cmd_tokens); // run a command in a child process
+            }
         }
         enqueue(cmd_history, cmd); // add the command to the command history
         free(cmd_tokens);
@@ -159,8 +158,8 @@ void add_pid(pid_t pid){
 // Display process history
 void display_pids(){
     for (int i = 0; i < ps_history.size; i++){
-        char* status = get_status(ps_history.pids[i]); // fetch status of process
-        printf("%d \t %s\n", ps_history.pids[i], status);
+        // char* status = get_status(ps_history.pids[i]); // fetch status of process
+        printf("%d\n", ps_history.pids[i]);
     }
 }
 
@@ -169,11 +168,11 @@ char* get_status(pid_t pid){
     int status;
     // Correct this part
     waitpid(pid, &status, WNOHANG|WUNTRACED);
-    if (WIFEXITED(status)){
+    if (WIFEXITED(status)) {
         return "EXITED";
-    } else if (WIFSIGNALED(status)){
+    } else if (WIFSIGNALED(status)) {
         return "KILLED";
-    } else if (WIFSTOPPED(status)){
+    } else if (WIFSTOPPED(status)) {
         return "STOPPED";
     } else {
         return "RUNNING";
@@ -190,35 +189,66 @@ void update_curr_dir(){
 
 // Change working directory
 void change_dir(char** cmd_tokens){
-    if (cmd_tokens[1] == NULL || strcmp(cmd_tokens[1], "~") == 0){
+    if (cmd_tokens[1] == NULL || strcmp(cmd_tokens[1], "~") == 0) {
         // if no directory is specified or directory is ~, change to home directory
         cmd_tokens[1] = getenv("HOME");
     }
-    if (chdir(cmd_tokens[1]) != 0){
+    if (chdir(cmd_tokens[1]) != 0) {
         perror("change directory failed");
     }
     update_curr_dir(); // update the current working directory
     return;
 }
 
-// Run commands using exec()
-void run_command(char** cmd_tokens){
-    bool is_background = false;
-    if (cmd_tokens[0][0] == '&'){ // if the command is to be run in background
-        is_background = true;
-        cmd_tokens[0] = cmd_tokens[0] + 1; // set the str pointer to the next element
+// Check if a command is piped and return the index of the pipe character
+int get_pipe(char** cmd_tokens){
+    for (int i = 0; cmd_tokens[i] != NULL; i++){
+        if (strcmp(cmd_tokens[i], PIPE_CHAR) == 0){
+            return i; // return the location of the pipe
+        }
     }
+    return -1; // return -1 if no pipe is found
+}
+
+// Run a command
+void run_command(char** cmd_tokens){
+    int pipe_loc = get_pipe(cmd_tokens); // check if the command is piped
+    if (pipe_loc < 0) { // command is not piped
+        run_cmd_fork(cmd_tokens); // run the command in a child process
+    } else {
+        cmd_tokens[pipe_loc] = NULL; // split the command into two parts
+        char** tokens_1 = cmd_tokens;
+        char** tokens_2 = cmd_tokens + pipe_loc + 1;
+        // run_cmd_pipe(cmd_tokens, pipe_loc); // run piped command
+        run_cmd_fork(tokens_1); // change this
+        run_cmd_fork(tokens_2);
+    }
+    return;
+}
+
+// Run a command in a child process
+void run_cmd_fork(char** cmd_tokens){
+    bool is_background = cmd_tokens[0][0] == '&'; // if the command is to be run in background
+    cmd_tokens[0] = cmd_tokens[0][0] == '&' ? cmd_tokens[0] + 1 : cmd_tokens[0]; // remove the '&' from the command
+
+    bool ps_cmd = strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0; // if it is a ps_history command
     pid_t pid = fork(); // create a child process
     if (pid < 0){
         perror("fork error");
         exit(1);
-    } else if (pid == 0){ // child process
-        execvp(cmd_tokens[0], cmd_tokens);
-        // if exec returns then there was an error
-        perror("exec error");
-        exit(1);
+    } else if (pid == 0) { // child process
+        if (ps_cmd) {
+            display_pids(); // display process history
+        } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0) {
+            display_queue(cmd_history); // display command history
+        } else {
+            execvp(cmd_tokens[0], cmd_tokens); // run a command using exec
+            perror("exec error"); // if exec returns then there was an error
+            exit(1);
+        }
+        exit(0); // exit the child process
     } else { // parent process
-        add_pid(pid); // add the pid to the process history
+        if (!ps_cmd) add_pid(pid); // not adding ps_history as it will generate outdated output in that case
         if (!is_background){ // if command is not background
             int status;
             waitpid(pid, &status, 0); // wait for the particular child to finish
