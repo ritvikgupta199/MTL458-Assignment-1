@@ -8,6 +8,7 @@
 const int INIT_STR_SIZE = 100;
 const int INIT_TOKEN_LEN = 10;
 const int HISTORY_SIZE = 5;
+const int INIT_PID_LEN = 10;
 const char* HIST_CMD = "cmd_history";
 const char* PROC_HIST_CMD = "ps_history";
 const char* CD_CMD = "cd";
@@ -18,7 +19,13 @@ struct History {
     char* cmd[HISTORY_SIZE];
     int front, rear;
 };
-struct History* history_queue;
+struct History* cmd_history;
+
+struct ProcessHistory {
+    pid_t* pids;
+    int size, capacity;
+};
+struct ProcessHistory ps_history;
 
 void update_curr_dir();
 void init();
@@ -30,7 +37,11 @@ void change_dir(char** tokens);
 struct History* create_queue();
 void dequeue(struct History* queue);
 void enqueue(struct History* queue, char* cmd);
-void print_queue(struct History* queue);
+void display_queue(struct History* queue);
+
+void add_pid(pid_t pid);
+void display_pids();
+char* get_status(pid_t pid);
 
 char cwd[PATH_MAX];
 
@@ -49,9 +60,9 @@ int main() {
             continue;
         } else {
             if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0){
-                printf("Print process history\n");
+                display_pids();
             } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0){
-                print_queue(history_queue);
+                display_queue(cmd_history);
             } else if (strcmp(cmd_tokens[0], CD_CMD) == 0){
                 change_dir(cmd_tokens);
             } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0){
@@ -60,7 +71,7 @@ int main() {
                 run_command(cmd_tokens);
             }     
         }
-        enqueue(history_queue, cmd);
+        enqueue(cmd_history, cmd);
         free(cmd_tokens);
         free(input);
     }
@@ -69,14 +80,16 @@ int main() {
 // Initialize the shell
 void init(){
     update_curr_dir();
-    history_queue = create_queue();
+    cmd_history = create_queue(); // initiliaze command history queue
+    ps_history.size = 0;
+    ps_history.capacity = INIT_PID_LEN;
+    ps_history.pids = malloc(sizeof(pid_t) * ps_history.capacity);
 }
 
 // Create a new queue
 struct History* create_queue(){
     struct History* queue = (struct History*)malloc(sizeof(struct History));
-    queue->front = -1;
-    queue->rear = -1;
+    queue->front = queue->rear = -1; // initially empty queue
     for (int i = 0; i < HISTORY_SIZE; i++) {
         queue->cmd[i] = NULL;
     }
@@ -111,7 +124,8 @@ void enqueue(struct History* queue, char* cmd){
     return;
 }
 
-void print_queue(struct History* queue){
+// Display the command history queue
+void display_queue(struct History* queue){
     if (queue->front == -1){
         printf("command history is empty\n"); // queue is empty
         return;
@@ -124,6 +138,40 @@ void print_queue(struct History* queue){
         printf("%s\n", queue->cmd[queue->rear]); // print the remaining element at rear
     }
     return;
+}
+
+// Add pid to process history
+void add_pid(pid_t pid){
+    // if the size reaches capacity -1, reallocate more space
+    if (ps_history.size == ps_history.capacity - 1){
+        ps_history.capacity += INIT_PID_LEN;
+        ps_history.pids = realloc(ps_history.pids, sizeof(pid_t) * ps_history.capacity);
+    }
+    ps_history.pids[ps_history.size++] = pid; // add pid to the end of the array
+}
+
+// Display process history
+void display_pids(){
+    for (int i = 0; i < ps_history.size; i++){
+        char* status = get_status(ps_history.pids[i]); // fetch status of process
+        printf("%d \t %s\n", ps_history.pids[i], status);
+    }
+}
+
+// Get status of a process with pid
+char* get_status(pid_t pid){
+    int status;
+    // Correct this part
+    waitpid(pid, &status, WNOHANG|WUNTRACED);
+    if (WIFEXITED(status)){
+        return "EXITED";
+    } else if (WIFSIGNALED(status)){
+        return "KILLED";
+    } else if (WIFSTOPPED(status)){
+        return "STOPPED";
+    } else {
+        return "RUNNING";
+    }
 }
 
 // Update the current working directory
@@ -164,6 +212,7 @@ void run_command(char** cmd_tokens){
         perror("exec error");
         exit(1);
     } else { // parent process
+        add_pid(pid);
         if (!is_background){ // if command is not background
             int status;
             waitpid(pid, &status, 0); // wait for the particular child to finish

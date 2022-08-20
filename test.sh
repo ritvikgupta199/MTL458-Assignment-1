@@ -1,3 +1,2 @@
-# Print "Hello" after 5 seconds
-sleep 5
+sleep 10
 echo "Hello"
