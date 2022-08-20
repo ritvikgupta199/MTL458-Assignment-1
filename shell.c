@@ -9,20 +9,34 @@ const int INIT_STR_SIZE = 100;
 // const int INIT_CMD_SIZE = 20;
 const int INIT_TOKEN_LEN = 10;
 
+// Structure to store command history as a queue
+struct History {
+    char* cmd[5];
+    int front, rear;
+};
+struct History* history_queue;
+
+void update_curr_dir();
+void init();
 char* get_input();
 char** get_tokens(char* input_str);
 void run_command(char** tokens);
-void update_curr_dir();
 void change_dir(char** tokens);
+
+struct History* create_queue();
+void dequeue(struct History* queue);
+void enqueue(struct History* queue, char* cmd);
+void print_queue(struct History* queue);
 
 char cwd[PATH_MAX];
 
 
 int main() {
-    update_curr_dir();
+    init();
     while(1){
         printf("%s$ ", cwd);
         char* input = get_input();
+        char* cmd = strdup(input);
         if (input == NULL){
             continue;
         }
@@ -32,19 +46,80 @@ int main() {
         } else {
             if (strcmp(cmd_tokens[0], "ps_history") == 0){
                 printf("Print process history\n");
-            } else if (strcmp(cmd_tokens[0], "cmd_history") == 0){
-                printf("Print command history\n");
+            } else if (strcmp(cmd_tokens[0], "cmd") == 0){ // will change
+                print_queue(history_queue);
             } else if (strcmp(cmd_tokens[0], "cd") == 0){
                 change_dir(cmd_tokens);
             } else if (strcmp(cmd_tokens[0], "exit") == 0){
-                exit(1);
+                exit(0);
             } else {
                 run_command(cmd_tokens);
             }     
         }
+        enqueue(history_queue, cmd);
         free(cmd_tokens);
         free(input);
     }
+}
+
+// Initialize the shell
+void init(){
+    update_curr_dir();
+    history_queue = create_queue();
+}
+
+// Create a new queue
+struct History* create_queue(){
+    struct History* queue = (struct History*)malloc(sizeof(struct History));
+    queue->front = -1;
+    queue->rear = -1;
+    for (int i = 0; i < 5; i++) {
+        queue->cmd[i] = NULL;
+    }
+    return queue;
+}
+
+// Dequeue a command from the queue
+void dequeue(struct History* queue){
+    if(queue->front == -1){
+        return; // queue is empty
+    }
+    queue->cmd[queue->front] = NULL;
+    if (queue->front == queue->rear) { // queue has only one element
+        queue->front = queue->rear = -1;
+    } else {
+        queue->front = (queue->front + 1) % 5;
+    }
+    return;
+}
+
+// Enqueue a command in the queue
+void enqueue(struct History* queue, char* cmd){
+    if (queue->front == (queue->rear + 1) % 5){
+        // if the queue is full then dequeue the oldest element
+        dequeue(queue);
+    }
+    if (queue->front == -1) { // queue is empty
+        queue->front = 0;
+    }
+    queue->rear = (queue->rear + 1) % 5;
+    queue->cmd[queue->rear] = cmd;
+    return;
+}
+
+void print_queue(struct History* queue){
+    if (queue->front == -1){
+        printf("command history is empty\n"); // queue is empty
+        return;
+    } else if (queue->front == queue->rear){ // queue has only one element
+        printf("%s\n", queue->cmd[queue->front]);
+    } else {
+        for (int i = queue->front; i != queue->rear; i = (i + 1) % 5){
+            printf("%s\n", queue->cmd[i]); // print all elements in the queue
+        }
+        printf("%s\n", queue->cmd[queue->rear]); // print the remaining element at rear
+    }
+    return;
 }
 
 // Update the current working directory
