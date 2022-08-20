@@ -133,10 +133,11 @@ void display_queue(struct History* queue){
     } else if (queue->front == queue->rear){ // queue has only one element
         printf("%s\n", queue->cmd[queue->front]);
     } else {
-        for (int i = queue->front; i != queue->rear; i = (i + 1) % HISTORY_SIZE){
+        // display elements so that latest command appears first
+        for (int i = queue->rear; i != queue->front; i = (i - 1 + HISTORY_SIZE) % HISTORY_SIZE){
             printf("%s\n", queue->cmd[i]); // print all elements in the queue
         }
-        printf("%s\n", queue->cmd[queue->rear]); // print the remaining element at rear
+        printf("%s\n", queue->cmd[queue->front]); // print the remaining element at rear
     }
     return;
 }
