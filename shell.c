@@ -6,12 +6,16 @@
 #include <limits.h>
 
 const int INIT_STR_SIZE = 100;
-// const int INIT_CMD_SIZE = 20;
 const int INIT_TOKEN_LEN = 10;
+const int HISTORY_SIZE = 5;
+const char* HIST_CMD = "cmd_history";
+const char* PROC_HIST_CMD = "ps_history";
+const char* CD_CMD = "cd";
+const char* EXIT_CMD = "exit";
 
 // Structure to store command history as a queue
 struct History {
-    char* cmd[5];
+    char* cmd[HISTORY_SIZE];
     int front, rear;
 };
 struct History* history_queue;
@@ -36,21 +40,21 @@ int main() {
     while(1){
         printf("%s$ ", cwd);
         char* input = get_input();
-        char* cmd = strdup(input);
-        if (input == NULL){
+        if (input == NULL) {
             continue;
         }
+        char* cmd = strdup(input);
         char** cmd_tokens = get_tokens(input);
         if (cmd_tokens == NULL){
             continue;
         } else {
-            if (strcmp(cmd_tokens[0], "ps_history") == 0){
+            if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0){
                 printf("Print process history\n");
-            } else if (strcmp(cmd_tokens[0], "cmd") == 0){ // will change
+            } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0){
                 print_queue(history_queue);
-            } else if (strcmp(cmd_tokens[0], "cd") == 0){
+            } else if (strcmp(cmd_tokens[0], CD_CMD) == 0){
                 change_dir(cmd_tokens);
-            } else if (strcmp(cmd_tokens[0], "exit") == 0){
+            } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0){
                 exit(0);
             } else {
                 run_command(cmd_tokens);
@@ -73,7 +77,7 @@ struct History* create_queue(){
     struct History* queue = (struct History*)malloc(sizeof(struct History));
     queue->front = -1;
     queue->rear = -1;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < HISTORY_SIZE; i++) {
         queue->cmd[i] = NULL;
     }
     return queue;
@@ -88,21 +92,21 @@ void dequeue(struct History* queue){
     if (queue->front == queue->rear) { // queue has only one element
         queue->front = queue->rear = -1;
     } else {
-        queue->front = (queue->front + 1) % 5;
+        queue->front = (queue->front + 1) % HISTORY_SIZE;
     }
     return;
 }
 
 // Enqueue a command in the queue
 void enqueue(struct History* queue, char* cmd){
-    if (queue->front == (queue->rear + 1) % 5){
+    if (queue->front == (queue->rear + 1) % HISTORY_SIZE){
         // if the queue is full then dequeue the oldest element
         dequeue(queue);
     }
     if (queue->front == -1) { // queue is empty
         queue->front = 0;
     }
-    queue->rear = (queue->rear + 1) % 5;
+    queue->rear = (queue->rear + 1) % HISTORY_SIZE;
     queue->cmd[queue->rear] = cmd;
     return;
 }
@@ -114,7 +118,7 @@ void print_queue(struct History* queue){
     } else if (queue->front == queue->rear){ // queue has only one element
         printf("%s\n", queue->cmd[queue->front]);
     } else {
-        for (int i = queue->front; i != queue->rear; i = (i + 1) % 5){
+        for (int i = queue->front; i != queue->rear; i = (i + 1) % HISTORY_SIZE){
             printf("%s\n", queue->cmd[i]); // print all elements in the queue
         }
         printf("%s\n", queue->cmd[queue->rear]); // print the remaining element at rear
@@ -145,17 +149,26 @@ void change_dir(char** cmd_tokens){
 
 // Run commands using exec()
 void run_command(char** cmd_tokens){
+    bool is_background = false;
+    if (cmd_tokens[0][0] == '&'){ // if the command is to be run in background
+        is_background = true;
+        cmd_tokens[0] = cmd_tokens[0] + 1; // set the str pointer to the next element
+    }
     pid_t pid = fork();
     if (pid < 0){
         perror("fork error");
         exit(1);
-    } else if (pid == 0){
+    } else if (pid == 0){ // child process
         execvp(cmd_tokens[0], cmd_tokens);
         // if exec returns then there was an error
         perror("exec error");
         exit(1);
-    } else {
-        wait(NULL); // wait for child to finish
+    } else { // parent process
+        if (!is_background){ // if command is not background
+            wait(NULL); // wait for child to finish
+        } else {
+            printf("[%d] %s\n", pid, cmd_tokens[0]); // print the pid and command of the background process
+        }
     }
 }
 
@@ -180,6 +193,9 @@ char* get_input(){
             }
         }
         s[i++] = ch;
+    }
+    if (i == 0){
+        return NULL; // if no input is entered, return null
     }
     s[i] = '\0'; // null terminate the string
     return s;

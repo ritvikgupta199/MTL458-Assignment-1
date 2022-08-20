@@ -16,5 +16,6 @@ build:
 	$(COMPILER) -o shell shell.c
 all:
 	rm -f shell
-	$(COMPILER) -o shell shell.c
+	$(COMPILER) shell.c -o shell
+	clear
 	./shell
