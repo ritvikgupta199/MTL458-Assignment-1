@@ -146,6 +146,10 @@ void add_pid(pid_t pid){
     if (ps_history.size == ps_history.capacity - 1){
         ps_history.capacity += INIT_PID_LEN;
         ps_history.pids = realloc(ps_history.pids, sizeof(pid_t) * ps_history.capacity);
+        if (ps_history.pids == NULL){
+            perror("realloc error");
+            exit(1);
+        }
     }
     ps_history.pids[ps_history.size++] = pid; // add pid to the end of the array
 }
