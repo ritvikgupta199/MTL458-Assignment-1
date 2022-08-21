@@ -7,8 +7,9 @@
 - [ ] Process history
   - [x] PID list
   - [ ] Process status
-- [ ] Piping between commands
+- [x] Piping between commands
   - [x] Pipe detection
 - [x] Command runs in background
   - [x] Handle for `cmd_history`, and `ps_history`
 - [ ] Support for environment variables
+- [ ] Ctrl-C exit handling

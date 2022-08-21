@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <limits.h>
 
+#define WRITE_END 1
+#define READ_END 0
+
 const int INIT_STR_SIZE = 100;
 const int INIT_TOKEN_LEN = 10;
 const int HISTORY_SIZE = 5;
@@ -36,6 +39,8 @@ char** get_tokens(char* input_str);
 int get_pipe(char** tokens);
 void run_command(char** tokens);
 void run_cmd_fork(char** tokens);
+void run_cmd_pipe(char** tokens1, char** tokens2);
+void run_cmd(char** tokens);
 void change_dir(char** tokens);
 
 struct History* create_queue();
@@ -210,45 +215,70 @@ int get_pipe(char** cmd_tokens){
     return -1; // return -1 if no pipe is found
 }
 
-// Run a command
+// Run a command in a child process
 void run_command(char** cmd_tokens){
     int pipe_loc = get_pipe(cmd_tokens); // check if the command is piped
     if (pipe_loc < 0) { // command is not piped
-        run_cmd_fork(cmd_tokens); // run the command in a child process
+        run_cmd_fork(cmd_tokens); // run a command without pipe
     } else {
         cmd_tokens[pipe_loc] = NULL; // split the command into two parts
-        char** tokens_1 = cmd_tokens;
-        char** tokens_2 = cmd_tokens + pipe_loc + 1;
-        // run_cmd_pipe(cmd_tokens, pipe_loc); // run piped command
-        run_cmd_fork(tokens_1); // change this
-        run_cmd_fork(tokens_2);
+        char** tokens1 = cmd_tokens;
+        char** tokens2 = cmd_tokens + pipe_loc + 1;
+        run_cmd_pipe(tokens1, tokens2);
     }
     return;
 }
 
-// Run a command in a child process
+// Run a command with pipe
+void run_cmd_pipe(char** tokens1, char** tokens2){
+    int fd[2];
+    pipe(fd); // create a pipe
+    pid_t pid1 = fork(); // create first child process
+    if (pid1 < 0) {
+        perror("fork error");
+        exit(1);
+    } else if (pid1 == 0) { // first child process
+        dup2(fd[WRITE_END], STDOUT_FILENO); // redirect output to pipe
+        close(fd[READ_END]);
+        close(fd[WRITE_END]);
+        run_cmd(tokens1); // run the first command
+    } else { // parent process
+        pid_t pid2 = fork(); // create second child process
+        if (pid2 < 0) {
+            perror("fork error");
+            exit(1);
+        } else if (pid2 == 0) { // second child process
+            dup2(fd[READ_END], STDIN_FILENO); // redirect input to pipe
+            close(fd[READ_END]);
+            close(fd[WRITE_END]);
+            run_cmd(tokens2); // run the second command
+        } else { // parent process
+            close(fd[READ_END]);
+            close(fd[WRITE_END]);
+            // add pids to process history
+            add_pid(pid1);
+            add_pid(pid2);
+            int stat1, stat2;
+            // wait for the child processes to finish
+            waitpid(pid1, &stat1, 0);
+            waitpid(pid2, &stat2, 0);
+        }
+    }
+    return;
+}
+
+// Run a command without pipe
 void run_cmd_fork(char** cmd_tokens){
     bool is_background = cmd_tokens[0][0] == '&'; // if the command is to be run in background
     cmd_tokens[0] = cmd_tokens[0][0] == '&' ? cmd_tokens[0] + 1 : cmd_tokens[0]; // remove the '&' from the command
-
-    bool ps_cmd = strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0; // if it is a ps_history command
     pid_t pid = fork(); // create a child process
-    if (pid < 0){
+    if (pid < 0) {
         perror("fork error");
         exit(1);
     } else if (pid == 0) { // child process
-        if (ps_cmd) {
-            display_pids(); // display process history
-        } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0) {
-            display_queue(cmd_history); // display command history
-        } else {
-            execvp(cmd_tokens[0], cmd_tokens); // run a command using exec
-            perror("exec error"); // if exec returns then there was an error
-            exit(1);
-        }
-        exit(0); // exit the child process
+        run_cmd(cmd_tokens); // run the command
     } else { // parent process
-        if (!ps_cmd) add_pid(pid); // not adding ps_history as it will generate outdated output in that case
+        add_pid(pid); // add pid to process history
         if (!is_background){ // if command is not background
             int status;
             waitpid(pid, &status, 0); // wait for the particular child to finish
@@ -256,6 +286,20 @@ void run_cmd_fork(char** cmd_tokens){
             printf("[%d] %s\n", pid, cmd_tokens[0]); // print the pid and command of the background process
         }
     }
+}
+
+// Run command using exec or defined functions
+void run_cmd(char** cmd_tokens){
+    if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0) {
+        display_pids(); // display process history
+    } else if (strcmp(cmd_tokens[0], HIST_CMD) == 0) {
+        display_queue(cmd_history); // display command history
+    } else {
+        execvp(cmd_tokens[0], cmd_tokens); // run a command using exec
+        perror("exec error"); // if exec returns then there was an error
+        exit(1);
+    }
+    exit(0); // exit the child process
 }
 
 // Take arbitrary length input for the shell
