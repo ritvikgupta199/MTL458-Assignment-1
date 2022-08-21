@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <limits.h>
 
-#define WRITE_END 1
 #define READ_END 0
+#define WRITE_END 1
 
 const int INIT_STR_SIZE = 100;
 const int INIT_TOKEN_LEN = 10;
@@ -17,6 +17,9 @@ const char* PROC_HIST_CMD = "ps_history";
 const char* CD_CMD = "cd";
 const char* EXIT_CMD = "exit";
 const char* PIPE_CHAR = "|";
+const char BACKGROUND_CHAR = '&';
+
+char cwd[PATH_MAX];
 
 // Structure to store command history as a queue
 struct History {
@@ -51,8 +54,6 @@ void display_queue(struct History* queue);
 void add_pid(pid_t pid);
 void display_pids();
 char* get_status(pid_t pid);
-
-char cwd[PATH_MAX];
 
 
 int main() {
@@ -138,7 +139,7 @@ void display_queue(struct History* queue){
         printf("%s\n", queue->cmd[queue->front]);
     } else {
         // display elements so that latest command appears first
-        for (int i = queue->rear; i != queue->front; i = (i - 1 + HISTORY_SIZE) % HISTORY_SIZE){
+        for (int i = queue->rear; i != queue->front; i = (i - 1 + HISTORY_SIZE) % HISTORY_SIZE) {
             printf("%s\n", queue->cmd[i]); // print all elements in the queue
         }
         printf("%s\n", queue->cmd[queue->front]); // print the remaining element at rear
@@ -269,8 +270,8 @@ void run_cmd_pipe(char** tokens1, char** tokens2){
 
 // Run a command without pipe
 void run_cmd_fork(char** cmd_tokens){
-    bool is_background = cmd_tokens[0][0] == '&'; // if the command is to be run in background
-    cmd_tokens[0] = cmd_tokens[0][0] == '&' ? cmd_tokens[0] + 1 : cmd_tokens[0]; // remove the '&' from the command
+    bool is_background = cmd_tokens[0][0] == BACKGROUND_CHAR; // if the command is to be run in background
+    cmd_tokens[0] = cmd_tokens[0][0] == BACKGROUND_CHAR ? cmd_tokens[0] + 1 : cmd_tokens[0]; // remove the '&' from the command
     pid_t pid = fork(); // create a child process
     if (pid < 0) {
         perror("fork error");

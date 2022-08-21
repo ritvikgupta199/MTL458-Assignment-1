@@ -13,7 +13,7 @@ clean:
 	rm -f shell
 build:
 	rm -f shell
-	$(COMPILER) -o shell shell.c
+	$(COMPILER) shell.c -o shell
 all:
 	rm -f shell
 	$(COMPILER) shell.c -o shell
