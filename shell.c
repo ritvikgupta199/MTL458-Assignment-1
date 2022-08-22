@@ -60,10 +60,10 @@ void dequeue(struct History* queue);
 void enqueue(struct History* queue, char* cmd);
 void display_queue(struct History* queue);
 
-void add_pid(pid_t pid);
+void add_pid(pid_t pid, char* status);
 void display_pids();
 void update_status();
-char* get_status(pid_t pid);
+char* get_status(pid_t pid, bool is_background);
 
 
 int main() {
@@ -164,7 +164,7 @@ void display_queue(struct History* queue){
 }
 
 // Add pid to process history
-void add_pid(pid_t pid){
+void add_pid(pid_t pid, char* status){
     // if the size reaches capacity -1, reallocate more space
     if (ps_history.size == ps_history.capacity - 1) {
         ps_history.capacity += INIT_PID_LEN;
@@ -174,8 +174,8 @@ void add_pid(pid_t pid){
             exit(1);
         }
     }
-    ps_history.procs[ps_history.size].pid = pid; // add process to the end of the array
-    ps_history.procs[ps_history.size++].status = NULL; // set process status to NULL
+    ps_history.procs[ps_history.size].pid = pid;
+    ps_history.procs[ps_history.size++].status = status; // add process to the end of the array
 }
 
 // Display process history
@@ -185,18 +185,22 @@ void display_pids(){
     }
 }
 
-// Update status of each process in process history
+// Update the status of all background processes (those with RUNNING or NULL status)
 void update_status(){
     for (int i = 0; i < ps_history.size; i++) {
-        ps_history.procs[i].status = get_status(ps_history.procs[i].pid);
+        if (ps_history.procs[i].status == NULL || strcmp(ps_history.procs[i].status, "RUNNING") == 0) {
+            ps_history.procs[i].status = get_status(ps_history.procs[i].pid, 1);
+        }
     }
     return;
 }
 
 // Get status of a process with pid
-char* get_status(pid_t pid){
+char* get_status(pid_t pid, bool is_background){
     int status;
-    pid_t flag = waitpid(pid, &status, WNOHANG);
+    // use WNOHANG and don't wait for background processes
+    // use WUNTRACED and wait for foreground processes to finish
+    pid_t flag = waitpid(pid, &status, is_background ? WNOHANG : WUNTRACED);
     if (flag < 0) {
         perror("waitpid error");
         return "WAITPID_ERROR";
@@ -332,13 +336,12 @@ void run_cmd_pipe(char** tokens1, char** tokens2){
         } else { // parent process
             close(fd[READ_END]);
             close(fd[WRITE_END]);
-            // add pids to process history
-            add_pid(pid1);
-            add_pid(pid2);
-            int stat1, stat2;
             // wait for the child processes to finish
-            waitpid(pid1, &stat1, 0);
-            waitpid(pid2, &stat2, 0);
+            char* stat1 = get_status(pid1, 0);
+            char* stat2 = get_status(pid2, 0);
+            // add both process to history
+            add_pid(pid1, stat1);
+            add_pid(pid2, stat2);
         }
     }
     return;
@@ -355,11 +358,9 @@ void run_cmd_fork(char** cmd_tokens){
     } else if (pid == 0) { // child process
         run_cmd(cmd_tokens); // run the command
     } else { // parent process
-        add_pid(pid); // add pid to process history
-        if (!is_background) { // if command is not background
-            int status;
-            waitpid(pid, &status, 0); // wait for the particular child to finish
-        } else {
+        char* status = get_status(pid, is_background); // wait for foreground process and get status for background process
+        add_pid(pid, status); // add process to history
+        if (is_background) {
             printf("[%d] %s\n", pid, cmd_tokens[0]); // print the pid and command of the background process
         }
     }

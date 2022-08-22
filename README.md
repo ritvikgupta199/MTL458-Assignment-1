@@ -4,9 +4,9 @@
 - [x] Basic shell prompts
 - [x] Change directory
 - [x] Command history
-- [ ] Process history
+- [x] Process history
   - [x] PID list
-  - [ ] Process status
+  - [x] Process status
 - [x] Piping between commands
   - [x] Pipe detection
 - [x] Command runs in background
