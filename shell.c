@@ -41,6 +41,9 @@ void update_curr_dir();
 char* get_input();
 char** get_tokens(char* input_str);
 int get_pipe(char** tokens);
+bool is_env_var_assignment(char* cmd);
+void set_env_var(char* env_cmd);
+void replace_env_var(char** tokens);
 void run_command(char** tokens);
 void run_cmd_fork(char** tokens);
 void run_cmd_pipe(char** tokens1, char** tokens2);
@@ -59,7 +62,7 @@ char* get_status(pid_t pid);
 
 int main() {
     init(); // initialize working directory, command history and process history
-    while(1){
+    while(1) {
         printf("%s$ ", cwd); // print working directory and prompt
         char* input = get_input();
         if (input == NULL) {
@@ -67,7 +70,7 @@ int main() {
         }
         char* cmd = strdup(input);
         char** cmd_tokens = get_tokens(input); // get command tokens from input
-        if (cmd_tokens == NULL){
+        if (cmd_tokens == NULL) {
             continue;
         } else {
             if (strcmp(cmd_tokens[0], CD_CMD) == 0) {
@@ -111,7 +114,7 @@ struct History* create_queue(){
 
 // Dequeue a command from the queue
 void dequeue(struct History* queue){
-    if(queue->front == -1){
+    if(queue->front == -1) {
         return; // queue is empty
     }
     queue->cmd[queue->front] = NULL;
@@ -125,7 +128,7 @@ void dequeue(struct History* queue){
 
 // Enqueue a command in the queue
 void enqueue(struct History* queue, char* cmd){
-    if (queue->front == (queue->rear + 1) % HISTORY_SIZE){
+    if (queue->front == (queue->rear + 1) % HISTORY_SIZE) {
         // if the queue is full then dequeue the oldest element
         dequeue(queue);
     }
@@ -139,10 +142,10 @@ void enqueue(struct History* queue, char* cmd){
 
 // Display the command history queue
 void display_queue(struct History* queue){
-    if (queue->front == -1){
+    if (queue->front == -1) {
         printf("command history is empty\n"); // queue is empty
         return;
-    } else if (queue->front == queue->rear){ // queue has only one element
+    } else if (queue->front == queue->rear) { // queue has only one element
         printf("%s\n", queue->cmd[queue->front]);
     } else {
         // display elements so that latest command appears first
@@ -157,10 +160,10 @@ void display_queue(struct History* queue){
 // Add pid to process history
 void add_pid(pid_t pid){
     // if the size reaches capacity -1, reallocate more space
-    if (ps_history.size == ps_history.capacity - 1){
+    if (ps_history.size == ps_history.capacity - 1) {
         ps_history.capacity += INIT_PID_LEN;
         ps_history.pids = realloc(ps_history.pids, sizeof(pid_t) * ps_history.capacity);
-        if (ps_history.pids == NULL){
+        if (ps_history.pids == NULL) {
             perror("realloc error");
             exit(1);
         }
@@ -170,7 +173,7 @@ void add_pid(pid_t pid){
 
 // Display process history
 void display_pids(){
-    for (int i = 0; i < ps_history.size; i++){
+    for (int i = 0; i < ps_history.size; i++) {
         // char* status = get_status(ps_history.pids[i]); // fetch status of process
         printf("%d\n", ps_history.pids[i]);
     }
@@ -194,7 +197,7 @@ char* get_status(pid_t pid){
 
 // Update the current working directory
 void update_curr_dir(){
-    if (getcwd(cwd, sizeof(cwd)) == NULL){
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
         exit(1); // error in fetching working directory
     }
     return;
@@ -213,19 +216,19 @@ void change_dir(char** cmd_tokens){
     return;
 }
 
-// Check if a command is piped and return the index of the pipe character
-int get_pipe(char** cmd_tokens){
-    for (int i = 0; cmd_tokens[i] != NULL; i++){
-        if (strcmp(cmd_tokens[i], PIPE_CHAR) == 0){
-            return i; // return the location of the pipe
-        }
-    }
-    return -1; // return -1 if no pipe is found
-}
-
 // Run a command in a child process
 void run_command(char** cmd_tokens){
+    if (is_env_var_assignment(cmd_tokens[0])) { // if the command is for setting environment variable
+        if (cmd_tokens[1] == NULL) { // if there is a single token
+            set_env_var(cmd_tokens[0]);
+            return;
+        } else { // if there are one or more tokens after assignment
+            perror("invalid command");
+            return;
+        }
+    }
     int pipe_loc = get_pipe(cmd_tokens); // check if the command is piped
+    replace_env_var(cmd_tokens); // replace environment variables in the command
     if (pipe_loc < 0) { // command is not piped
         run_cmd_fork(cmd_tokens); // run a command without pipe
     } else {
@@ -235,6 +238,56 @@ void run_command(char** cmd_tokens){
         run_cmd_pipe(tokens1, tokens2);
     }
     return;
+}
+
+// Check if the command is for setting environment variable
+bool is_env_var_assignment(char* cmd){
+    for (int i = 0; i < strlen(cmd); i++) {
+        if (cmd[i] == '='){
+            return true;
+        }
+    }
+    return false;
+}
+
+// Set environment variable
+void set_env_var(char* env_cmd){
+    char* var = strtok(env_cmd, "="); // name of the variable
+    char* val = strtok(NULL, "="); // value of the variable
+    if (var == NULL || val == NULL) { // name or value of variable is NULL
+        perror("invalid command");
+        return;
+    } else {
+        setenv(var, val, 1); // set the environment variable
+    }
+    return;
+}
+
+// Replace enviroment variables in commands with their values
+void replace_env_var(char** cmd_tokens){
+    for (int i = 0; cmd_tokens[i] != NULL; i++) {
+        if (cmd_tokens[i][0] == '$') { // if the token is an environment variable
+            char* env_var = cmd_tokens[i] + 1; // remove $ to get variable name
+            char* env_val = getenv(env_var); // value of the environment variable
+            if (env_val == NULL) { // if the environment variable is not set
+                perror("environment variable not set");
+                return;
+            } else {
+                cmd_tokens[i] = env_val; // replace the variable with its value
+            }
+        }
+    }
+    return;
+}
+
+// Check if a command is piped and return the index of the pipe character
+int get_pipe(char** cmd_tokens){
+    for (int i = 0; cmd_tokens[i] != NULL; i++) {
+        if (strcmp(cmd_tokens[i], PIPE_CHAR) == 0){
+            return i; // return the location of the pipe
+        }
+    }
+    return -1; // return -1 if no pipe is found
 }
 
 // Run a command with pipe
@@ -287,7 +340,7 @@ void run_cmd_fork(char** cmd_tokens){
         run_cmd(cmd_tokens); // run the command
     } else { // parent process
         add_pid(pid); // add pid to process history
-        if (!is_background){ // if command is not background
+        if (!is_background) { // if command is not background
             int status;
             waitpid(pid, &status, 0); // wait for the particular child to finish
         } else {
@@ -315,14 +368,14 @@ char* get_input(){
     char ch;
     int i = 0, s_size = INIT_STR_SIZE;
     char* s = malloc(s_size * sizeof(char)); // allocate memory for string
-    if (s == NULL){
+    if (s == NULL) {
         perror("malloc error");
         exit(1);
     }
-    while((ch = getc(stdin)) != '\n'){
+    while((ch = getc(stdin)) != '\n') {
         // if the index reaches the second last element of the string, reallocate more space
         // second last element is last non-null character
-        if (i == s_size - 1){
+        if (i == s_size - 1) {
             s_size += INIT_STR_SIZE;
             s = realloc(s, s_size * sizeof(char));
             if (s == NULL){
@@ -332,7 +385,7 @@ char* get_input(){
         }
         s[i++] = ch;
     }
-    if (i == 0){
+    if (i == 0) {
         return NULL; // if no input is entered, return null
     }
     s[i] = '\0'; // null terminate the string
@@ -350,7 +403,7 @@ char** get_tokens(char* input_str){
         if (i == t_size - 1) {
             t_size += INIT_TOKEN_LEN;
             tokens = realloc(tokens, t_size * sizeof(char*));
-            if (tokens == NULL){
+            if (tokens == NULL) {
                 perror("realloc error");
                 exit(1);
             }

@@ -11,5 +11,7 @@
   - [x] Pipe detection
 - [x] Command runs in background
   - [x] Handle for `cmd_history`, and `ps_history`
-- [ ] Support for environment variables
+- [x] Support for environment variables
+  - [x] Set environment variables
+  - [x] Use environment variables in commands
 - [x] Ctrl-C exit handling
