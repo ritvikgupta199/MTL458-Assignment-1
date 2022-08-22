@@ -28,9 +28,14 @@ struct History {
 };
 struct History* cmd_history;
 
+// Structure to store pid and status of a process
+struct Process {
+    pid_t pid;
+    char* status;
+};
 // Structure to store process history
 struct ProcessHistory {
-    pid_t* pids;
+    struct Process* procs;
     int size, capacity;
 };
 struct ProcessHistory ps_history;
@@ -57,11 +62,12 @@ void display_queue(struct History* queue);
 
 void add_pid(pid_t pid);
 void display_pids();
+void update_status();
 char* get_status(pid_t pid);
 
 
 int main() {
-    init(); // initialize working directory, command history and process history
+    init(); // initialize signal handler, working directory, command history and process history
     while(1) {
         printf("%s$ ", cwd); // print working directory and prompt
         char* input = get_input();
@@ -94,7 +100,7 @@ void init(){
     cmd_history = create_queue(); // initiliaze command history queue
     ps_history.size = 0;
     ps_history.capacity = INIT_PID_LEN;
-    ps_history.pids = malloc(sizeof(pid_t) * ps_history.capacity);
+    ps_history.procs = (struct Process*)malloc(sizeof(struct Process) * ps_history.capacity);
 }
 
 // Exit the shell
@@ -162,37 +168,44 @@ void add_pid(pid_t pid){
     // if the size reaches capacity -1, reallocate more space
     if (ps_history.size == ps_history.capacity - 1) {
         ps_history.capacity += INIT_PID_LEN;
-        ps_history.pids = realloc(ps_history.pids, sizeof(pid_t) * ps_history.capacity);
-        if (ps_history.pids == NULL) {
+        ps_history.procs = realloc(ps_history.procs, sizeof(struct Process*) * ps_history.capacity);
+        if (ps_history.procs == NULL) {
             perror("realloc error");
             exit(1);
         }
     }
-    ps_history.pids[ps_history.size++] = pid; // add pid to the end of the array
+    ps_history.procs[ps_history.size].pid = pid; // add process to the end of the array
+    ps_history.procs[ps_history.size++].status = NULL; // set process status to NULL
 }
 
 // Display process history
 void display_pids(){
     for (int i = 0; i < ps_history.size; i++) {
-        // char* status = get_status(ps_history.pids[i]); // fetch status of process
-        printf("%d\n", ps_history.pids[i]);
+        printf("%d \t %s \n", ps_history.procs[i].pid, ps_history.procs[i].status);
     }
+}
+
+// Update status of each process in process history
+void update_status(){
+    for (int i = 0; i < ps_history.size; i++) {
+        ps_history.procs[i].status = get_status(ps_history.procs[i].pid);
+    }
+    return;
 }
 
 // Get status of a process with pid
 char* get_status(pid_t pid){
     int status;
-    // Correct this part
-    waitpid(pid, &status, WNOHANG|WUNTRACED);
-    if (WIFEXITED(status)) {
-        return "EXITED";
-    } else if (WIFSIGNALED(status)) {
-        return "KILLED";
-    } else if (WIFSTOPPED(status)) {
-        return "STOPPED";
-    } else {
+    pid_t flag = waitpid(pid, &status, WNOHANG);
+    if (flag < 0) {
+        perror("waitpid error");
+        return "WAITPID_ERROR";
+    } else if (flag == 0) { // returns 0 if the process is still running
         return "RUNNING";
+    } else { // returns pid of the stopped process
+        return "STOPPED";
     }
+    return NULL;
 }
 
 // Update the current working directory
@@ -213,30 +226,6 @@ void change_dir(char** cmd_tokens){
         perror("change directory failed");
     }
     update_curr_dir(); // update the current working directory
-    return;
-}
-
-// Run a command in a child process
-void run_command(char** cmd_tokens){
-    if (is_env_var_assignment(cmd_tokens[0])) { // if the command is for setting environment variable
-        if (cmd_tokens[1] == NULL) { // if there is a single token
-            set_env_var(cmd_tokens[0]);
-            return;
-        } else { // if there are one or more tokens after assignment
-            perror("invalid command");
-            return;
-        }
-    }
-    int pipe_loc = get_pipe(cmd_tokens); // check if the command is piped
-    replace_env_var(cmd_tokens); // replace environment variables in the command
-    if (pipe_loc < 0) { // command is not piped
-        run_cmd_fork(cmd_tokens); // run a command without pipe
-    } else {
-        cmd_tokens[pipe_loc] = NULL; // split the command into two parts
-        char** tokens1 = cmd_tokens;
-        char** tokens2 = cmd_tokens + pipe_loc + 1;
-        run_cmd_pipe(tokens1, tokens2);
-    }
     return;
 }
 
@@ -276,6 +265,33 @@ void replace_env_var(char** cmd_tokens){
                 cmd_tokens[i] = env_val; // replace the variable with its value
             }
         }
+    }
+    return;
+}
+
+// Run a command in a child process
+void run_command(char** cmd_tokens){
+    if (is_env_var_assignment(cmd_tokens[0])) { // if the command is for setting environment variable
+        if (cmd_tokens[1] == NULL) { // if there is a single token
+            set_env_var(cmd_tokens[0]);
+            return;
+        } else { // if there are one or more tokens after assignment
+            perror("invalid command");
+            return;
+        }
+    }
+    if (strcmp(cmd_tokens[0], PROC_HIST_CMD) == 0) {
+        update_status();
+    }
+    int pipe_loc = get_pipe(cmd_tokens); // check if the command is piped
+    replace_env_var(cmd_tokens); // replace environment variables in the command
+    if (pipe_loc < 0) { // command is not piped
+        run_cmd_fork(cmd_tokens); // run a command without pipe
+    } else {
+        cmd_tokens[pipe_loc] = NULL; // split the command into two parts
+        char** tokens1 = cmd_tokens;
+        char** tokens2 = cmd_tokens + pipe_loc + 1;
+        run_cmd_pipe(tokens1, tokens2);
     }
     return;
 }
