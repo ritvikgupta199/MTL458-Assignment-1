@@ -36,6 +36,7 @@ struct ProcessHistory {
 struct ProcessHistory ps_history;
 
 void init();
+void exit_handler();
 void update_curr_dir();
 char* get_input();
 char** get_tokens(char* input_str);
@@ -85,11 +86,17 @@ int main() {
 
 // Initialize the shell
 void init(){
+    signal(SIGINT, exit_handler); // handle Ctrl+C signal to exit the shell
     update_curr_dir();
     cmd_history = create_queue(); // initiliaze command history queue
     ps_history.size = 0;
     ps_history.capacity = INIT_PID_LEN;
     ps_history.pids = malloc(sizeof(pid_t) * ps_history.capacity);
+}
+
+// Exit the shell
+void exit_handler(){
+    exit(0);
 }
 
 // Create a new queue

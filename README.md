@@ -12,4 +12,4 @@
 - [x] Command runs in background
   - [x] Handle for `cmd_history`, and `ps_history`
 - [ ] Support for environment variables
-- [ ] Ctrl-C exit handling
+- [x] Ctrl-C exit handling
