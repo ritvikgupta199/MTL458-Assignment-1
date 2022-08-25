@@ -11,7 +11,8 @@ clang/gcc shell.c -o shell
 ```
 
 ### Shell commands
-- **Changing directory:** Working directory of the shell can be changed using `cd [path_to_directory]`.
+- **Changing directory:** 
+  - Working directory of the shell can be changed using `cd [path_to_directory]`, where `cd ~` can be used to change to home directory.
 - **Exiting the shell:** The shell can be exited by pressing Ctrl+C or using the command `exit`.
 - **Background processes:** A process can be run in the background by prepending `&` to the command, i.e. `&cmd1 arg1 arg2 ... argn`.
 - **Piped commands:** Two commands can be piped together in the format `cmd1 arg1 arg2 ... argn | cmd2 arg1 arg2 ... argn`.
