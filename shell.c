@@ -4,14 +4,17 @@
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #define READ_END 0
 #define WRITE_END 1
+#define INIT_STR_SIZE 128
+#define INIT_TOKEN_LEN  32
+#define HISTORY_SIZE 5
+#define INIT_PID_LEN 32
 
-const int INIT_STR_SIZE = 100;
-const int INIT_TOKEN_LEN = 10;
-const int HISTORY_SIZE = 5;
-const int INIT_PID_LEN = 10;
 const char* HIST_CMD = "cmd_history";
 const char* PROC_HIST_CMD = "ps_history";
 const char* CD_CMD = "cd";
@@ -123,7 +126,7 @@ void dequeue(struct History* queue){
     if(queue->front == -1) {
         return; // queue is empty
     }
-    queue->cmd[queue->front] = NULL;
+    free(queue->cmd[queue->front]); // free the memory
     if (queue->front == queue->rear) { // queue has only one element
         queue->front = queue->rear = -1;
     } else {
@@ -165,10 +168,10 @@ void display_queue(struct History* queue){
 
 // Add pid to process history
 void add_pid(pid_t pid, char* status){
-    // if the size reaches capacity -1, reallocate more space
+    // if the size reaches capacity - 1, reallocate more space
     if (ps_history.size == ps_history.capacity - 1) {
         ps_history.capacity += INIT_PID_LEN;
-        ps_history.procs = realloc(ps_history.procs, sizeof(struct Process*) * ps_history.capacity);
+        ps_history.procs = realloc(ps_history.procs, sizeof(struct Process) * ps_history.capacity);
         if (ps_history.procs == NULL) {
             perror("realloc error");
             exit(1);
