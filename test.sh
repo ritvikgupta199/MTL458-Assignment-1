@@ -1,2 +1,2 @@
-sleep 10
+sleep 50
 echo "Hello"

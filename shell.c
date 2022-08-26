@@ -72,7 +72,7 @@ char* get_status(pid_t pid, bool is_background);
 int main() {
     init(); // initialize signal handler, working directory, command history and process history
     while(1) {
-        printf("%s$ ", cwd); // print working directory and prompt
+        printf("%s~$ ", cwd); // print working directory and prompt
         char* input = get_input();
         if (input == NULL) {
             continue; // if input is NULL, continue to next iteration
@@ -85,7 +85,7 @@ int main() {
             if (strcmp(cmd_tokens[0], CD_CMD) == 0) {
                 change_dir(cmd_tokens); // change working directory
             } else if (strcmp(cmd_tokens[0], EXIT_CMD) == 0) {
-                exit(0); // exit the shell
+                exit_handler(); // exit the shell
             } else {
                 run_command(cmd_tokens); // run a command in a child process
             }
@@ -378,7 +378,7 @@ void run_cmd(char** cmd_tokens){
     } else {
         execvp(cmd_tokens[0], cmd_tokens); // run a command using exec
         perror("exec error"); // if exec returns then there was an error
-        exit(1);
+        exit(1); // exit the child process
     }
     exit(0); // exit the child process
 }
